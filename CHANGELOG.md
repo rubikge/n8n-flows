@@ -5,10 +5,20 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Ideas / Next Steps
-- Replace localtunnel with [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) for stable, persistent URLs (no restart needed)
 - Extract sensitive config (`WEBHOOK_URL`, timezone) into a `.env` file so `docker-compose.yml` stays clean in git
 - Add n8n workflow export/backup script to version-control workflow definitions
 - Add a `Makefile` with shortcuts: `make up`, `make tunnel`, `make down`, `make logs`
+- Set up cloudflared with a named tunnel + custom domain for a permanent URL
+
+---
+
+## [0.2.0] — 2026-05-21
+
+### Changed
+- Replaced localtunnel with **cloudflared** in `tunnel.sh` — more reliable, no traffic limits
+- Added `local` mode: `./tunnel.sh local` starts n8n without a tunnel (sets `WEBHOOK_URL=http://localhost:5678`)
+- Health-check interval increased from 15 s to 30 s (cloudflared is self-healing, less polling needed)
+- Tunnel log path changed from `/tmp/localtunnel.log` to `/tmp/cloudflared.log`
 
 ---
 

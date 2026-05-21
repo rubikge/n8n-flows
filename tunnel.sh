@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
+#
+# Usage:
+#   ./tunnel.sh           — start with cloudflared tunnel (default)
+#   ./tunnel.sh local     — start without tunnel (localhost only)
+
+MODE="${1:-tunnel}"
 
 COMPOSE_FILE="$(cd "$(dirname "$0")" && pwd)/docker-compose.yml"
-TUNNEL_LOG="/tmp/localtunnel.log"
-HEALTH_INTERVAL=15
+TUNNEL_LOG="/tmp/cloudflared.log"
+HEALTH_INTERVAL=30
 TUNNEL_PID=""
 CURRENT_URL=""
 
@@ -15,22 +21,23 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 start_tunnel() {
-  pkill -f "localtunnel" 2>/dev/null || true
+  pkill -f "cloudflared tunnel" 2>/dev/null || true
   rm -f "$TUNNEL_LOG"
 
-  echo "[tunnel] Starting localtunnel..."
-  npx localtunnel --port 5678 > "$TUNNEL_LOG" 2>&1 &
+  echo "[tunnel] Starting cloudflared..."
+  cloudflared tunnel --url http://localhost:5678 > "$TUNNEL_LOG" 2>&1 &
   TUNNEL_PID=$!
 
   local url=""
-  for i in $(seq 1 20); do
-    url=$(grep -o 'https://[^ ]*\.loca\.lt' "$TUNNEL_LOG" 2>/dev/null | head -1)
+  for i in $(seq 1 40); do
+    url=$(grep -o 'https://[^ ]*\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
     [ -n "$url" ] && break
     sleep 0.5
   done
 
   if [ -z "$url" ]; then
-    echo "[tunnel] ERROR: failed to get URL"
+    echo "[tunnel] ERROR: failed to get URL. cloudflared output:"
+    cat "$TUNNEL_LOG"
     TUNNEL_PID=""
     return 1
   fi
@@ -62,7 +69,16 @@ is_tunnel_alive() {
   return 0
 }
 
-# ── Main loop ────────────────────────────────────────────────────────────────
+# ── Local mode ────────────────────────────────────────────────────────────────
+
+if [ "$MODE" = "local" ]; then
+  CURRENT_URL="http://localhost:5678"
+  update_and_restart_n8n
+  echo "[n8n] Running in local mode. Webhooks will not be reachable from the internet."
+  exit 0
+fi
+
+# ── Tunnel mode (default) ─────────────────────────────────────────────────────
 
 while true; do
   if ! start_tunnel; then
