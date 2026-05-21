@@ -7,6 +7,7 @@
 MODE="${1:-tunnel}"
 
 COMPOSE_FILE="$(cd "$(dirname "$0")" && pwd)/docker-compose.yml"
+ENV_FILE="$(cd "$(dirname "$0")" && pwd)/.env"
 TUNNEL_LOG="/tmp/cloudflared.log"
 HEALTH_INTERVAL=30
 TUNNEL_PID=""
@@ -48,7 +49,11 @@ start_tunnel() {
 }
 
 update_and_restart_n8n() {
-  sed -i "s|WEBHOOK_URL=.*|WEBHOOK_URL=${CURRENT_URL}|" "$COMPOSE_FILE"
+  if [ -f "$ENV_FILE" ] && grep -q "^WEBHOOK_URL=" "$ENV_FILE"; then
+    sed -i "s|^WEBHOOK_URL=.*|WEBHOOK_URL=${CURRENT_URL}|" "$ENV_FILE"
+  else
+    echo "WEBHOOK_URL=${CURRENT_URL}" >> "$ENV_FILE"
+  fi
   echo "[n8n] Restarting with WEBHOOK_URL=${CURRENT_URL}"
   docker compose -f "$COMPOSE_FILE" down --timeout 5 2>&1 | tail -1
   docker compose -f "$COMPOSE_FILE" up -d 2>&1 | tail -1

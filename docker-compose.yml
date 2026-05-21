@@ -16,7 +16,7 @@ services:
       # Whitelist host-mounted directory for the Read/Write Files from Disk node.
       # Paths are separated by ';'. Keep ~/.n8n-files (the default) and add /files.
       - N8N_RESTRICT_FILE_ACCESS_TO=/files;~/.n8n-files
-      - WEBHOOK_URL=https://fancy-bikes-matter.loca.lt
+      - WEBHOOK_URL=${WEBHOOK_URL}
     volumes:
       # Saves your n8n workflow data permanently in a Docker volume
       - n8n_data:/home/node/.n8n
