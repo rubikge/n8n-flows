@@ -5,7 +5,6 @@ TUNNEL_LOG="/tmp/localtunnel.log"
 HEALTH_INTERVAL=15
 TUNNEL_PID=""
 CURRENT_URL=""
-TUNNEL_SUBDOMAIN="n8n-sprivalov"  # fixed subdomain → https://n8n-sprivalov.loca.lt
 
 cleanup() {
   echo ""
@@ -20,7 +19,7 @@ start_tunnel() {
   rm -f "$TUNNEL_LOG"
 
   echo "[tunnel] Starting localtunnel..."
-  npx localtunnel --port 5678 --subdomain "$TUNNEL_SUBDOMAIN" > "$TUNNEL_LOG" 2>&1 &
+  npx localtunnel --port 5678 > "$TUNNEL_LOG" 2>&1 &
   TUNNEL_PID=$!
 
   local url=""
