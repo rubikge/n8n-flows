@@ -1,0 +1,58 @@
+{
+  "name": "Angie — Errors",
+  "nodes": [
+    {
+      "id": "err-trigger-1",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "tg-send-1",
+      "name": "Notify Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "chatId": "63277017",
+        "text": "=❌ {{ $json.workflow.name }} failed\nNode: {{ $json.execution.lastNodeExecuted }}\nError: {{ $json.execution.error?.message || 'unknown' }}\n{{ $json.execution.url }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "name": "Yarik Bot"
+        }
+      },
+      "webhookId": "142f38df-902e-46c3-8dc1-7d9ff745da05"
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Notify Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true
+  }
+}

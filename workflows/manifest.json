@@ -1,0 +1,16 @@
+{
+  "workflows": [
+    {
+      "file": "angie.json",
+      "name": "Angie, personal AI assistant with Telegram voice and text"
+    },
+    {
+      "file": "angie-errors.json",
+      "name": "Angie — Errors"
+    },
+    {
+      "file": "zoom-summary.json",
+      "name": "Zoom recording → summary → Telegram"
+    }
+  ]
+}

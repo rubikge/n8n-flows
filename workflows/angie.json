@@ -1,25 +1,25 @@
 {
   "name": "Angie, personal AI assistant with Telegram voice and text",
-  "active": false,
-  "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate"
-  },
   "nodes": [
     {
       "parameters": {
-        "updates": ["message"],
+        "updates": [
+          "message"
+        ],
         "additionalFields": {}
       },
-      "id": "ce01ad6f-6fab-4d2a-a196-58d239c6ca52",
+      "id": "3b82d7cb-24d9-4c29-abd0-c9cc96eb99ec",
       "name": "Listen for incoming events",
       "type": "n8n-nodes-base.telegramTrigger",
-      "position": [-864, 384],
+      "position": [
+        -1440,
+        496
+      ],
       "typeVersion": 1,
+      "webhookId": "d647289a-3d18-43ac-8860-78d5f2c0d867",
       "credentials": {
         "telegramApi": {
-          "id": "nKwqpWwHW2BxZS9e",
-          "name": "Tg Yarik bot"
+          "name": "Yarik Bot"
         }
       }
     },
@@ -37,10 +37,13 @@
         },
         "options": {}
       },
-      "id": "bcb4a44e-595d-418f-a774-69a5963333b4",
+      "id": "4ff11de9-5220-4258-a27c-182333cd0660",
       "name": "AllowList",
       "type": "n8n-nodes-base.set",
-      "position": [-640, 336],
+      "position": [
+        -1216,
+        448
+      ],
       "typeVersion": 3.4
     },
     {
@@ -68,10 +71,13 @@
         "looseTypeValidation": true,
         "options": {}
       },
-      "id": "7383b514-4fbd-4e30-adbd-8911395bad90",
+      "id": "02167cc6-02ec-403c-9d95-6cb715368a3e",
       "name": "If1",
       "type": "n8n-nodes-base.if",
-      "position": [-256, 480],
+      "position": [
+        -1024,
+        496
+      ],
       "typeVersion": 2.3
     },
     {
@@ -90,10 +96,13 @@
         },
         "options": {}
       },
-      "id": "3f2a613f-1fb9-414c-9077-62c6ce62da99",
+      "id": "da8ac681-3fb4-4ebb-b74f-a67fb04a5ae7",
       "name": "Voice or Text",
       "type": "n8n-nodes-base.set",
-      "position": [-144, 192],
+      "position": [
+        -544,
+        -96
+      ],
       "typeVersion": 3.2
     },
     {
@@ -121,10 +130,13 @@
         },
         "options": {}
       },
-      "id": "6e42dfaf-6898-434c-9533-8bc88c2e84b7",
+      "id": "db7b8f15-faf6-40e7-b621-f68967e2f1c8",
       "name": "If",
       "type": "n8n-nodes-base.if",
-      "position": [80, 240],
+      "position": [
+        -400,
+        240
+      ],
       "typeVersion": 2.2
     },
     {
@@ -133,30 +145,36 @@
         "fileId": "={{ $('Listen for incoming events').item.json.message.voice.file_id }}",
         "additionalFields": {}
       },
-      "id": "2add88a3-0d8f-45e6-b3a6-8dce103a6659",
+      "id": "0daa3481-381a-4c3f-820c-9044c9159550",
       "name": "Get Voice File",
       "type": "n8n-nodes-base.telegram",
-      "position": [304, -80],
+      "position": [
+        -160,
+        -32
+      ],
       "typeVersion": 1.1,
+      "webhookId": "5999b7c7-b98c-4fe1-a9ed-acf008271365",
       "credentials": {
         "telegramApi": {
-          "id": "nKwqpWwHW2BxZS9e",
-          "name": "Tg Yarik bot"
+          "name": "Yarik Bot"
         }
       }
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.text }}",
+        "text": "={{ $json.text || $json.content?.parts?.[0]?.text || '' }}",
         "options": {
           "systemMessage": "You are a helpful assistant.\n\nToday's date is {{ $now }}.\n\nGuidelines:\n- When fetching emails, filter out any promotional emails.\n- When summarizing emails, include Sender, Message date, subject, and brief summary of email.\n- If the user did not specify a date in the request assume they are asking for today\n- When answering questions about calendar events, filter out events that don't apply to the question. For example, the question is about events for today, only reply with events for today. Don't mention future events if it's more than 1 week away"
         }
       },
-      "id": "78bf4870-f83a-436e-91d6-1efa9cbf3b0a",
+      "id": "eedda075-4b7c-45b4-a640-a14f89f919a7",
       "name": "Angie, AI Assistant",
       "type": "@n8n/n8n-nodes-langchain.agent",
-      "position": [816, 128],
+      "position": [
+        432,
+        96
+      ],
       "typeVersion": 3.1
     },
     {
@@ -165,10 +183,13 @@
         "sessionKey": "angie_session_default",
         "contextWindowLength": 10
       },
-      "id": "bb5a79e4-341f-44b9-b1ed-e79029d2c0e2",
+      "id": "f5635c8d-7e5d-4fce-a49b-36b14985ad4b",
       "name": "Simple Memory",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
-      "position": [800, 528],
+      "position": [
+        224,
+        640
+      ],
       "typeVersion": 1.3
     },
     {
@@ -179,15 +200,18 @@
           "appendAttribution": false
         }
       },
-      "id": "ecf5ece5-118f-4169-b331-27e4250d500f",
+      "id": "f5f991cc-2d40-47d3-bb6e-e3dcb0f47384",
       "name": "Telegram",
       "type": "n8n-nodes-base.telegram",
-      "position": [1472, 240],
+      "position": [
+        1024,
+        288
+      ],
       "typeVersion": 1.1,
+      "webhookId": "7a5b16fd-9c6b-4fec-becc-f52ae781ec49",
       "credentials": {
         "telegramApi": {
-          "id": "nKwqpWwHW2BxZS9e",
-          "name": "Tg Yarik bot"
+          "name": "Yarik Bot"
         }
       }
     },
@@ -196,14 +220,17 @@
         "operation": "getAll",
         "filters": {}
       },
-      "id": "34db374f-2d16-4057-8c2f-66d66bc2f72c",
+      "id": "6a7cd4ce-74fd-43ff-a6a2-7b29381b2f6a",
       "name": "Get many messages in Gmail",
       "type": "n8n-nodes-base.gmailTool",
-      "position": [1008, 480],
+      "position": [
+        432,
+        592
+      ],
       "typeVersion": 2.2,
+      "webhookId": "e23299c3-1f1e-4c75-8f7c-9ffc6531d039",
       "credentials": {
         "gmailOAuth2": {
-          "id": "hazNybNwaEoQWXd1",
           "name": "sergei@rubik.school"
         }
       }
@@ -215,13 +242,15 @@
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1.1,
-      "position": [656, 464],
-      "id": "0fbd05f6-6dfd-4e80-962e-7751c8b408f4",
+      "position": [
+        160,
+        368
+      ],
+      "id": "7580b52f-a1ed-47fc-b4a1-68d6087e0cff",
       "name": "Google Gemini Chat Model",
       "credentials": {
         "googlePalmApi": {
-          "id": "x9wYPaqhvebcOEkd",
-          "name": "Google Gemini Tema"
+          "name": "Google Gemini(PaLM) Api account"
         }
       }
     },
@@ -239,13 +268,15 @@
       },
       "type": "@n8n/n8n-nodes-langchain.googleGemini",
       "typeVersion": 1.2,
-      "position": [576, -112],
-      "id": "40bde3a1-ed27-4142-a6af-eb1ff016a03a",
+      "position": [
+        160,
+        -48
+      ],
+      "id": "42f5f44b-f71d-4692-a66a-bebc5c9c5eed",
       "name": "Analyze audio",
       "credentials": {
         "googlePalmApi": {
-          "id": "x9wYPaqhvebcOEkd",
-          "name": "Google Gemini Tema"
+          "name": "Google Gemini(PaLM) Api account"
         }
       }
     },
@@ -257,24 +288,22 @@
           "appendAttribution": false
         }
       },
-      "id": "b8b71f7e-d690-49c6-88c4-fe64559bcb31",
+      "id": "50e418c5-6194-4605-9e11-7d495c4fe5e1",
       "name": "Ack: processing",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.1,
-      "position": [-432, -96],
+      "position": [
+        -832,
+        192
+      ],
+      "webhookId": "cb1e18ed-d832-4775-bb91-784e6648b894",
       "credentials": {
         "telegramApi": {
-          "id": "nKwqpWwHW2BxZS9e",
-          "name": "Tg Yarik bot"
+          "name": "Yarik Bot"
         }
       }
     },
     {
-      "id": "ce6e716a-9c19-4282-81af-45c63e10b7f3",
-      "name": "Truncate output",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [1184, 240],
       "parameters": {
         "assignments": {
           "assignments": [
@@ -287,51 +316,176 @@
           ]
         },
         "options": {}
-      }
+      },
+      "id": "fc0efd30-50e3-42e1-b990-ee87023a5050",
+      "name": "Truncate output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        816,
+        192
+      ]
     }
   ],
   "connections": {
     "If": {
       "main": [
-        [{ "node": "Get Voice File", "type": "main", "index": 0 }],
-        [{ "node": "Angie, AI Assistant", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Get Voice File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Angie, AI Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "AllowList": {
-      "main": [[{ "node": "If1", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Simple Memory": {
-      "ai_memory": [[{ "node": "Angie, AI Assistant", "type": "ai_memory", "index": 0 }]]
+      "ai_memory": [
+        [
+          {
+            "node": "Angie, AI Assistant",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Voice or Text": {
-      "main": [[{ "node": "If", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Get Voice File": {
-      "main": [[{ "node": "Analyze audio", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Analyze audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Get many messages in Gmail": {
-      "ai_tool": [[{ "node": "Angie, AI Assistant", "type": "ai_tool", "index": 0 }]]
+      "ai_tool": [
+        [
+          {
+            "node": "Angie, AI Assistant",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Listen for incoming events": {
-      "main": [[{ "node": "AllowList", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "AllowList",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Google Gemini Chat Model": {
-      "ai_languageModel": [[{ "node": "Angie, AI Assistant", "type": "ai_languageModel", "index": 0 }]]
+      "ai_languageModel": [
+        [
+          {
+            "node": "Angie, AI Assistant",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Analyze audio": {
-      "main": [[{ "node": "Angie, AI Assistant", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Angie, AI Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "If1": {
-      "main": [[{ "node": "Ack: processing", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Ack: processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Ack: processing": {
-      "main": [[{ "node": "Voice or Text", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Voice or Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Angie, AI Assistant": {
-      "main": [[{ "node": "Truncate output", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Truncate output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Truncate output": {
-      "main": [[{ "node": "Telegram", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "timeSavedPerExecution": 3,
+    "errorWorkflowName": "Angie — Errors"
   }
 }

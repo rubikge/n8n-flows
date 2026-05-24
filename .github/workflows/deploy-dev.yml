@@ -1,0 +1,34 @@
+name: Deploy workflows to n8n-dev
+
+on:
+  pull_request:
+    paths:
+      - 'workflows/**'
+      - 'scripts/**'
+      - '.github/workflows/deploy-dev.yml'
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - 'workflows/**'
+      - 'scripts/**'
+      - '.github/workflows/deploy-dev.yml'
+
+concurrency:
+  group: n8n-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Deploy
+        env:
+          N8N_URL: ${{ secrets.N8N_DEV_URL }}
+          N8N_API_KEY: ${{ secrets.N8N_DEV_API_KEY }}
+        run: node scripts/deploy.mjs

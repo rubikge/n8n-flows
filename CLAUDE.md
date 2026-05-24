@@ -4,30 +4,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repo manages a single n8n instance running on **Google Cloud Run**. Two workflows live there: the Angie Telegram-AI assistant and the Zoom recording → summary → Telegram pipeline. The `n8n-mcp` MCP server is configured to talk to this instance, so MCP tools (`mcp__n8n-mcp__n8n_*`) operate directly on the cloud workflows.
+This repo manages an n8n setup deployed on **Google Cloud Run** across two environments:
 
-There are no tests, linters, or build steps — this is a configuration / ops repo.
+- **prod** (`n8n`) — source of truth for live workflows
+- **dev** (`n8n-dev`) — staging instance, mirrors prod's shape
+
+`workflows/*.json` is the **source of truth** for workflow definitions. GitHub Actions pushes those JSONs into n8n via the REST API: feature branches/PRs deploy to dev, merges to `main` deploy to prod. Editing workflows directly in the prod n8n UI is unsafe — the next deploy will overwrite your changes.
+
+The `n8n-mcp` MCP server is configured to talk to **prod**, so `mcp__n8n-mcp__n8n_*` tools operate on live prod workflows. There are no tests or linters — this is a configuration / ops repo.
 
 ## Cloud n8n
+
+| Resource | prod | dev |
+|---|---|---|
+| Cloud Run service | `n8n` → https://n8n-344511854894.us-central1.run.app | `n8n-dev` (provision per runbook) |
+| Postgres database (on VM `n8n-pg-vm`) | `n8n` | `n8n_dev` |
+| Encryption-key secret | `n8n-encryption-key` | `n8n-encryption-key-dev` |
+| Telegram bot | "Yarik Bot" (prod chat) | dev BotFather bot |
+| Zoom Marketplace app | prod app | dev app (or skip Zoom on dev) |
+
+Other shared resources:
 
 | Resource | Value |
 |---|---|
 | GCP project | `n8n-test-496616` (project number `344511854894`) |
 | Region / zone | `us-central1` / `us-central1-a` |
-| Cloud Run service | `n8n` → https://n8n-344511854894.us-central1.run.app |
 | VM (Postgres) | `n8n-pg-vm` (`e2-micro`, Debian 12, 30GB disk), static IP `35.254.188.80`, Postgres 15 in Docker, port 5432 |
 | Service account | `n8n-service-account@n8n-test-496616.iam.gserviceaccount.com` |
-| Secrets (Secret Manager) | `n8n-db-password`, `n8n-encryption-key` |
+| DB-password secret | `n8n-db-password` (shared by prod and dev DB users) |
 | Firewall | `n8n-pg-fw`: tcp:5432 from `0.0.0.0/0` on VMs tagged `n8n-pg` |
-
-`angie-workflow.json` and `zoom-summary-workflow.json` are checked-in exports (no credentials embedded). The live workflows on Cloud Run are the source of truth; the JSON files are backups / references for diffs and restores.
 
 ## Workflows
 
-| Workflow | Live ID | Purpose |
+| Workflow | Live ID (prod) | Purpose |
 |---|---|---|
-| Angie, personal AI assistant with Telegram voice and text | `GL1AZv0gEcz66PDQ` | Telegram chat-trigger AI assistant with Gmail tool access |
+| Angie, personal AI assistant with Telegram voice and text | `GL1AZv0gEcz66PDQ` | Telegram chat-trigger AI assistant with Gmail tool access. `settings.errorWorkflow` -> Angie — Errors. |
+| Angie — Errors | `oXBllR5vTjxrFECV` | Error-trigger workflow — fires when Angie main fails, sends a Telegram alert. |
 | Zoom recording → summary → Telegram | `8v101lnwYq4QCjgY` | Webhook trigger on Zoom `recording.completed`: downloads M4A audio, transcribes & summarizes with Gemini 2.5 Flash, writes a row to the `meeting_summaries` Postgres table, sends summary to Telegram chat `63277017` via Yarik Bot |
+
+The mapping from workflow `name` to `workflows/*.json` file is in `workflows/manifest.json`. Adding a new workflow = add a manifest entry + a JSON file (easiest path: build in dev UI, then `npm run export -- --url=$DEV_URL --api-key=$DEV_KEY`).
 
 ### Zoom workflow specifics
 
@@ -53,13 +68,84 @@ There are no tests, linters, or build steps — this is a configuration / ops re
   ```
   Inserts use `ON CONFLICT (zoom_meeting_uuid) DO NOTHING` so Zoom retries don't duplicate rows.
 
+## Sync scripts (`scripts/`)
+
+Two Node 20 scripts drive repo ↔ n8n sync. Both accept `--url=...` `--api-key=...` or read `N8N_URL` / `N8N_API_KEY` env vars.
+
+```bash
+# pull live workflows into workflows/*.json (manual; safe to run anytime)
+N8N_URL=$PROD_URL N8N_API_KEY=$PROD_KEY node scripts/export.mjs
+
+# preview a deploy (no API writes)
+N8N_URL=$DEV_URL N8N_API_KEY=$DEV_KEY node scripts/deploy.mjs --dry-run
+
+# deploy (CI uses this without flags; first-time provisioning of a new env adds --activate-on-create)
+N8N_URL=$DEV_URL N8N_API_KEY=$DEV_KEY node scripts/deploy.mjs --activate-on-create
+```
+
+Deploy logic:
+1. Builds `{credential name -> id}` map on the target via `GET /api/v1/credentials`. Credentials are matched **by name** — they must already exist in the target n8n UI.
+2. **Pass 1**: upserts every manifest workflow without `settings.errorWorkflow`. Idempotent — no PUT if the normalized body equals the live one.
+3. **Pass 2**: for any workflow that has `settings.errorWorkflowName`, looks up the target ID by name and PUTs the workflow again with `settings.errorWorkflow` set.
+
+`active` is never toggled on update — set activation once in the UI per env. Use `--activate-on-create` for first-time provisioning.
+
+## CI/CD
+
+| Workflow | Trigger | Target | Secrets |
+|---|---|---|---|
+| `.github/workflows/deploy-dev.yml` | PRs and pushes to non-`main` branches | `n8n-dev` | `N8N_DEV_URL`, `N8N_DEV_API_KEY` |
+| `.github/workflows/deploy-prod.yml` | push to `main`, manual dispatch | `n8n` | `N8N_PROD_URL`, `N8N_PROD_API_KEY` |
+
+Both filter on `paths: workflows/**, scripts/**, .github/workflows/...` so doc-only changes don't trigger a deploy. `environment: production` on the prod workflow makes it visible in GitHub's Environments UI for adding manual approval gates later.
+
+## Provisioning the dev environment (runbook)
+
+One-time, manual:
+
+```bash
+gcloud config set project n8n-test-496616
+
+# 1. Create the dev DB (SSH to the Postgres VM)
+gcloud compute ssh n8n-pg-vm --zone=us-central1-a --command='sudo docker exec -i n8n-postgres psql -U n8n-user -d postgres -c "CREATE DATABASE \"n8n_dev\" OWNER \"n8n-user\";"'
+
+# 2. Create the dev encryption-key secret
+openssl rand -base64 32 | gcloud secrets create n8n-encryption-key-dev --data-file=-
+gcloud secrets add-iam-policy-binding n8n-encryption-key-dev \
+  --member='serviceAccount:n8n-service-account@n8n-test-496616.iam.gserviceaccount.com' \
+  --role='roles/secretmanager.secretAccessor'
+
+# 3. Deploy n8n-dev Cloud Run service
+#    Substitute env vars to match prod (use `gcloud run services describe n8n --region=us-central1` as the template).
+gcloud run deploy n8n-dev \
+  --region=us-central1 \
+  --image=n8nio/n8n:latest \
+  --service-account=n8n-service-account@n8n-test-496616.iam.gserviceaccount.com \
+  --allow-unauthenticated \
+  --set-env-vars=DB_TYPE=postgresdb,DB_POSTGRESDB_HOST=35.254.188.80,DB_POSTGRESDB_PORT=5432,DB_POSTGRESDB_DATABASE=n8n_dev,DB_POSTGRESDB_USER=n8n-user,N8N_BLOCK_ENV_ACCESS_IN_NODE=false,NODE_FUNCTION_ALLOW_BUILTIN=crypto \
+  --set-secrets=DB_POSTGRESDB_PASSWORD=n8n-db-password:latest,N8N_ENCRYPTION_KEY=n8n-encryption-key-dev:latest
+
+# After deploy, also set WEBHOOK_URL to the service URL (gcloud assigns it after first deploy):
+DEV_URL=$(gcloud run services describe n8n-dev --region=us-central1 --format='value(status.url)')
+gcloud run services update n8n-dev --region=us-central1 --update-env-vars="WEBHOOK_URL=$DEV_URL,N8N_HOST=${DEV_URL#https://}"
+```
+
+Then in the dev n8n UI (`$DEV_URL/setup`):
+1. Set up the owner account.
+2. Settings → API → create an API key. Save as the `N8N_DEV_API_KEY` GitHub secret; save `$DEV_URL` as `N8N_DEV_URL`.
+3. Manually create the credentials with **the same names** as prod: `Yarik Bot` (Telegram, dev BotFather token), `n8n-pg-vm` (Postgres, host `35.254.188.80`, db `n8n_dev`), `Google Gemini(PaLM) Api account`, `sergei@rubik.school` (Gmail OAuth — separate OAuth client or re-use prod's).
+4. From your laptop: `N8N_URL=$DEV_URL N8N_API_KEY=$DEV_KEY node scripts/deploy.mjs --activate-on-create` — should create all three workflows and activate them.
+
+For prod, set `N8N_PROD_URL` and `N8N_PROD_API_KEY` GitHub secrets (the prod API key is the one already in MCP config).
+
 ## Common ops commands
 
 ```bash
 gcloud config set project n8n-test-496616
 
 # Cloud Run logs
-gcloud run services logs read n8n --region=us-central1 --limit=100
+gcloud run services logs read n8n     --region=us-central1 --limit=100
+gcloud run services logs read n8n-dev --region=us-central1 --limit=100
 
 # SSH into the Postgres VM
 gcloud compute ssh n8n-pg-vm --zone=us-central1-a

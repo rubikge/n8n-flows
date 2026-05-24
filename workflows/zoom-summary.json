@@ -1,0 +1,371 @@
+{
+  "name": "Zoom recording → summary → Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zoom-recording-completed",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "n1",
+      "name": "Zoom Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1200,
+        0
+      ],
+      "webhookId": "eba08d9b-e2d2-4b0c-a357-e0fcc3ab0281",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.body.event }}",
+              "rightValue": "endpoint.url_validation"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n2",
+      "name": "If: URL validation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst plainToken = $input.first().json.body.payload.plainToken;\nconst secret = $env.ZOOM_WEBHOOK_SECRET;\nif (!secret) throw new Error('ZOOM_WEBHOOK_SECRET env var is not set on the n8n instance.');\nconst encryptedToken = crypto.createHmac('sha256', secret).update(plainToken).digest('hex');\nreturn [{ json: { plainToken, encryptedToken } }];"
+      },
+      "id": "n3",
+      "name": "Hash plainToken",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { plainToken: $json.plainToken, encryptedToken: $json.encryptedToken } }}",
+        "options": {}
+      },
+      "id": "n4",
+      "name": "Respond: validation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -480,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok",
+        "options": {}
+      },
+      "id": "n5",
+      "name": "Respond: 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -720,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Zoom Webhook').first().json.body;\nconst obj = body.payload.object;\nconst audio = (obj.recording_files || []).find(f => f.file_type === 'M4A');\nif (!audio) throw new Error('No M4A audio file in this recording.');\nreturn [{ json: {\n  meetingId: String(obj.id),\n  meetingUuid: obj.uuid,\n  topic: obj.topic,\n  hostEmail: obj.host_email,\n  startedAt: obj.start_time,\n  durationMin: obj.duration,\n  downloadUrl: `${audio.download_url}?access_token=${body.download_token}`,\n  playUrl: obj.share_url\n}}];"
+      },
+      "id": "n6",
+      "name": "Pick audio file",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.downloadUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "n7",
+      "name": "Download audio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -240,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.5-flash",
+          "mode": "id"
+        },
+        "inputType": "binary",
+        "options": {},
+        "operation": "analyze"
+      },
+      "id": "n8",
+      "name": "Transcribe",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        160
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "id"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Summarize this Zoom meeting transcript. Output plain text, max 1500 chars total, in three labeled sections:\nSUMMARY: one short paragraph.\nDECISIONS: bullet list, or \"none\".\nACTION ITEMS: bullet list with owners and (if mentioned) deadlines, or \"none\".\n\nTranscript:\n{{ $json.content.parts[0].text }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "n9",
+      "name": "Summarize",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        192,
+        160
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO meeting_summaries\n  (zoom_meeting_id, zoom_meeting_uuid, topic, host_email, started_at, duration_min, recording_url, transcript, summary)\nVALUES ($1, $2, $3, $4, $5::timestamptz, $6, $7, $8, $9)\nON CONFLICT (zoom_meeting_uuid) DO NOTHING\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ $('Pick audio file').first().json.meetingId }}, {{ $('Pick audio file').first().json.meetingUuid }}, {{ $('Pick audio file').first().json.topic }}, {{ $('Pick audio file').first().json.hostEmail }}, {{ $('Pick audio file').first().json.startedAt }}, {{ $('Pick audio file').first().json.durationMin }}, {{ $('Pick audio file').first().json.playUrl }}, {{ $('Transcribe').first().json.content.parts[0].text }}, {{ $json.content.parts[0].text }}"
+        }
+      },
+      "id": "n10",
+      "name": "Insert summary",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        480,
+        160
+      ],
+      "credentials": {
+        "postgres": {
+          "name": "n8n-pg-vm"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "63277017",
+        "text": "=📼 {{ String($('Pick audio file').first().json.topic).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }} ({{ $('Pick audio file').first().json.durationMin }} min)\n\n{{ String($('Summarize').first().json.content.parts[0].text || '').slice(0, 3500).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}\n\n▶ {{ $('Pick audio file').first().json.playUrl }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "n11",
+      "name": "Send to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        160
+      ],
+      "webhookId": "b7e9dce1-a4ab-4e60-a561-5b3657528bae",
+      "credentials": {
+        "telegramApi": {
+          "name": "Yarik Bot"
+        }
+      }
+    },
+    {
+      "id": "n12",
+      "name": "Fix MIME",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        160
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nfor (const item of items) {\n  if (item.binary?.data) {\n    item.binary.data.mimeType = 'audio/mp4';\n  }\n}\nreturn items;"
+      }
+    }
+  ],
+  "connections": {
+    "Zoom Webhook": {
+      "main": [
+        [
+          {
+            "node": "If: URL validation?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If: URL validation?": {
+      "main": [
+        [
+          {
+            "node": "Hash plainToken",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: 200 OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hash plainToken": {
+      "main": [
+        [
+          {
+            "node": "Respond: validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond: 200 OK": {
+      "main": [
+        [
+          {
+            "node": "Pick audio file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick audio file": {
+      "main": [
+        [
+          {
+            "node": "Download audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe": {
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize": {
+      "main": [
+        [
+          {
+            "node": "Insert summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert summary": {
+      "main": [
+        [
+          {
+            "node": "Send to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download audio": {
+      "main": [
+        [
+          {
+            "node": "Fix MIME",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fix MIME": {
+      "main": [
+        [
+          {
+            "node": "Transcribe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  }
+}
