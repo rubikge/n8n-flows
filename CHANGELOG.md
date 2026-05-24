@@ -5,10 +5,41 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Ideas / Next Steps
-- Extract sensitive config (`WEBHOOK_URL`, timezone) into a `.env` file so `docker-compose.yml` stays clean in git
-- Add n8n workflow export/backup script to version-control workflow definitions
-- Add a `Makefile` with shortcuts: `make up`, `make tunnel`, `make down`, `make logs`
-- Set up cloudflared with a named tunnel + custom domain for a permanent URL
+- Set `--min-instances=1` on Cloud Run if Telegram cold-start latency becomes annoying
+- Lock down Postgres access (currently public IP + password-only) — possibly via Serverless VPC Connector
+- Automate the Angie workflow re-deploy / config-as-code from `angie-workflow.json`
+
+---
+
+## [0.4.0] — 2026-05-24
+
+### Removed
+- Local Docker stack: `docker-compose.yml`, `tunnel.sh`, `.env`, `n8n-files/` — the repo is now cloud-only
+
+### Changed
+- README.md and CLAUDE.md rewritten to describe only the Cloud Run instance and its `gcloud` ops surface
+- `n8n-mcp` MCP server reconfigured to point at the Cloud Run URL with a cloud-instance API key (was: `http://localhost:5678`)
+- `.claude/settings.local.json` permission list pruned to drop `docker compose` / `./tunnel.sh` and add `gcloud secrets`, `gcloud iam`, `gcloud services list`, n8n MCP health check
+
+---
+
+## [0.3.0] — 2026-05-24
+
+### Added
+- GCP Cloud Run deployment of n8n at https://n8n-344511854894.us-central1.run.app, backed by Postgres on a free-tier `e2-micro` VM (`n8n-pg-vm`, `us-central1-a`, static IP `35.254.188.80`)
+- Secret Manager secrets for the DB password and the n8n encryption key
+- `n8n-service-account` with `secretmanager.secretAccessor` + `run.invoker (allUsers)` bindings
+- `angie-workflow.json` — canonical export of the Angie workflow (no credentials embedded)
+- CLAUDE.md section documenting the GCP deployment, ops commands, and project-level org policy overrides (`compute.vmExternalIpAccess` and `iam.allowedPolicyMemberDomains`)
+
+### Changed
+- Angie workflow now lives on Cloud Run; local docker-compose setup is dormant (only one n8n can hold the Telegram webhook at a time)
+
+### Fixed (Angie hardening before migration)
+- Inserted "Ack: processing" Telegram node so the user gets immediate feedback while the agent works
+- Added "Truncate output" Set node that strips Markdown special chars (`*`, `_`, `` ` ``, `[`, `]`) and caps reply length at 4000 chars — fixes Telegram `can't parse entities` and `message too long` errors
+- Wired the Gmail credential to the Gmail tool node
+- Removed Google Tasks node + corresponding line in the agent's system prompt
 
 ---
 

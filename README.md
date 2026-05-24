@@ -1,73 +1,37 @@
-# n8n Docker
+# n8n on Google Cloud Run
 
-Self-hosted [n8n](https://n8n.io) instance running in Docker with localtunnel support for public webhook access.
+Ops repo for a single n8n instance deployed on Google Cloud Run, with Postgres on a free-tier `e2-micro` Compute Engine VM. Hosts the **Angie** Telegram AI workflow.
 
-## Requirements
+- **Service URL:** https://n8n-344511854894.us-central1.run.app
+- **GCP project:** `n8n-test-496616` (region `us-central1`)
 
-- Docker + Docker Compose
-- Node.js (for `npx localtunnel`)
-
-## Quick Start
-
-### 1. Start with public tunnel (recommended)
-
-Starts localtunnel, updates `WEBHOOK_URL`, and restarts n8n in one command:
-
-```bash
-./tunnel.sh
-```
-
-n8n will be available at `http://localhost:5678`.
-
-### 2. Start without tunnel (local only)
-
-```bash
-docker compose up -d
-```
-
-## Public Webhooks via localtunnel
-
-`tunnel.sh` automates the full flow:
-
-1. Kills any existing localtunnel process
-2. Starts a new tunnel on port `5678`
-3. Captures the generated public URL (e.g. `https://xyz.loca.lt`)
-4. Updates `WEBHOOK_URL` in `docker-compose.yml`
-5. Restarts n8n so it picks up the new URL
-
-After running the script, the Telegram Trigger node (and all other webhook nodes) will show the public URL instead of `localhost`.
-
-> **Note:** The tunnel URL changes on every restart. Run `./tunnel.sh` again after each reboot to get a fresh URL and restart n8n.
-
-## File Layout
+## Repo layout
 
 ```
 n8n-docker/
-├── docker-compose.yml   # n8n service definition
-├── tunnel.sh            # localtunnel + n8n restart helper
-└── n8n-files/           # host directory mounted at /files inside container
+├── CLAUDE.md            # detailed ops guide + GCP resource map (read this)
+├── CHANGELOG.md         # release history
+├── angie-workflow.json  # exported Angie workflow JSON (canonical backup)
+└── .claude/             # Claude Code permissions for this project
 ```
 
-## Setting Up a Telegram Bot Webhook
-
-1. Run `./tunnel.sh` and note the tunnel URL
-2. In n8n, add a **Telegram Trigger** node and configure your bot credential
-3. Activate the workflow — n8n registers the webhook with Telegram automatically
-
-To verify the webhook is registered:
+## Quick ops
 
 ```bash
-curl https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getWebhookInfo
+gcloud config set project n8n-test-496616
+
+# tail Cloud Run logs
+gcloud run services logs read n8n --region=us-central1 --limit=100
+
+# SSH into the Postgres VM
+gcloud compute ssh n8n-pg-vm --zone=us-central1-a
+
+# tail Postgres container logs
+gcloud compute ssh n8n-pg-vm --zone=us-central1-a --command='sudo docker logs n8n-postgres --tail=100'
 ```
 
-## Stopping
+See [CLAUDE.md](CLAUDE.md) for the full resource inventory, env vars, IAM bindings, and project-level org policy overrides.
 
-```bash
-docker compose down
-```
+## Deployment background
 
-To also stop the background tunnel process, use the PID printed by `tunnel.sh`:
-
-```bash
-kill <TUNNEL_PID>
-```
+Deployed 2026-05-24 following the [n8n Cloud Run guide (durable mode)](https://docs.n8n.io/hosting/installation/server-setups/google-cloud-run/), substituting Postgres on a free-tier `e2-micro` VM in place of Cloud SQL to stay near $0/month.
