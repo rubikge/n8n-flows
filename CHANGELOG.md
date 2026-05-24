@@ -20,10 +20,13 @@ All notable changes to this project are documented here.
 - New n8n Postgres credential `n8n-pg-vm` (id `ieqLZNc7deNhXoPR`) pointing at `35.254.188.80:5432`, db `n8n`, user `n8n-user`
 - `zoom-summary-workflow.json` — checked-in export (no embedded secrets), mirrors the `angie-workflow.json` pattern
 
-### Required follow-up (manual, before activation)
-- Create a Zoom Marketplace **Server-to-Server OAuth** app subscribed to `recording.completed`; copy its Secret Token
-- Set `ZOOM_WEBHOOK_SECRET=<token>` env var on the Cloud Run service (`gcloud run services update n8n --update-env-vars=ZOOM_WEBHOOK_SECRET=...`)
-- Activate the workflow in the n8n UI to register the production webhook URL, then paste it into the Zoom app event subscription so the `endpoint.url_validation` handshake can complete
+### Cloud Run env vars added
+- `ZOOM_WEBHOOK_SECRET` — Zoom Marketplace app Secret Token (used by "Hash plainToken" Code node to sign the validation challenge)
+- `NODE_FUNCTION_ALLOW_BUILTIN=crypto` — whitelists Node's `crypto` module in the Code-node sandbox so `require('crypto')` works
+- `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` — lets Code nodes read env vars via `$env.X` (newer n8n defaults to blocking this)
+
+### Remaining manual step
+- Paste the production webhook URL `https://n8n-344511854894.us-central1.run.app/webhook/zoom-recording-completed` into the Zoom Marketplace app's Event Subscription endpoint. Validation handshake has been smoke-tested end-to-end and returns the correct HMAC-SHA256.
 
 ---
 

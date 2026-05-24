@@ -33,7 +33,10 @@ There are no tests, linters, or build steps — this is a configuration / ops re
 
 - Trigger is a generic `n8n-nodes-base.webhook` (n8n has no native Zoom trigger node). The path is `/webhook/zoom-recording-completed`.
 - Branches on the `endpoint.url_validation` event so Zoom's webhook handshake (HMAC-SHA256 of `plainToken` with the app's Secret Token) is answered in-workflow.
-- Requires Cloud Run env var **`ZOOM_WEBHOOK_SECRET`** set to the Zoom Marketplace app's Secret Token. The "Hash plainToken" Code node reads it via `process.env`.
+- Requires three Cloud Run env vars (already set on the service):
+  - `ZOOM_WEBHOOK_SECRET` — the Zoom Marketplace app's Secret Token, read by the "Hash plainToken" Code node as `$env.ZOOM_WEBHOOK_SECRET`
+  - `NODE_FUNCTION_ALLOW_BUILTIN=crypto` — whitelists Node's built-in `crypto` module in the Code-node sandbox so `require('crypto')` works
+  - `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` — lets Code nodes read env vars via `$env.X` (default in newer n8n versions is `true`, which blocks it)
 - Postgres credential `n8n-pg-vm` (id `ieqLZNc7deNhXoPR`) points at the existing VM Postgres (`35.254.188.80`, db `n8n`, user `n8n-user`).
 - Table schema:
   ```sql

@@ -55,7 +55,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const crypto = require('crypto');\nconst plainToken = $input.first().json.body.payload.plainToken;\nconst secret = process.env.ZOOM_WEBHOOK_SECRET;\nif (!secret) throw new Error('ZOOM_WEBHOOK_SECRET env var is not set on the n8n instance.');\nconst encryptedToken = crypto.createHmac('sha256', secret).update(plainToken).digest('hex');\nreturn [{ json: { plainToken, encryptedToken } }];"
+        "jsCode": "const crypto = require('crypto');\nconst plainToken = $input.first().json.body.payload.plainToken;\nconst secret = $env.ZOOM_WEBHOOK_SECRET;\nif (!secret) throw new Error('ZOOM_WEBHOOK_SECRET env var is not set on the n8n instance.');\nconst encryptedToken = crypto.createHmac('sha256', secret).update(plainToken).digest('hex');\nreturn [{ json: { plainToken, encryptedToken } }];"
       }
     },
     {
