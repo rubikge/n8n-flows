@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repo manages a single n8n instance running on **Google Cloud Run**. The Angie Telegram-AI workflow lives there. The `n8n-mcp` MCP server is configured to talk to this instance, so MCP tools (`mcp__n8n-mcp__n8n_*`) operate directly on the cloud workflow.
+This repo manages a single n8n instance running on **Google Cloud Run**. Two workflows live there: the Angie Telegram-AI assistant and the Zoom recording → summary → Telegram pipeline. The `n8n-mcp` MCP server is configured to talk to this instance, so MCP tools (`mcp__n8n-mcp__n8n_*`) operate directly on the cloud workflows.
 
 There are no tests, linters, or build steps — this is a configuration / ops repo.
 
@@ -20,7 +20,35 @@ There are no tests, linters, or build steps — this is a configuration / ops re
 | Secrets (Secret Manager) | `n8n-db-password`, `n8n-encryption-key` |
 | Firewall | `n8n-pg-fw`: tcp:5432 from `0.0.0.0/0` on VMs tagged `n8n-pg` |
 
-`angie-workflow.json` is a checked-in export of the Angie workflow (no credentials embedded). The live workflow on Cloud Run is the source of truth; the JSON is a backup / reference for diffs and restores.
+`angie-workflow.json` and `zoom-summary-workflow.json` are checked-in exports (no credentials embedded). The live workflows on Cloud Run are the source of truth; the JSON files are backups / references for diffs and restores.
+
+## Workflows
+
+| Workflow | Live ID | Purpose |
+|---|---|---|
+| Angie, personal AI assistant with Telegram voice and text | `GL1AZv0gEcz66PDQ` | Telegram chat-trigger AI assistant with Gmail tool access |
+| Zoom recording → summary → Telegram | `8v101lnwYq4QCjgY` | Webhook trigger on Zoom `recording.completed`: downloads M4A audio, transcribes & summarizes with Gemini 2.5 Flash, writes a row to the `meeting_summaries` Postgres table, sends summary to Telegram chat `63277017` via Yarik Bot |
+
+### Zoom workflow specifics
+
+- Trigger is a generic `n8n-nodes-base.webhook` (n8n has no native Zoom trigger node). The path is `/webhook/zoom-recording-completed`.
+- Branches on the `endpoint.url_validation` event so Zoom's webhook handshake (HMAC-SHA256 of `plainToken` with the app's Secret Token) is answered in-workflow.
+- Requires Cloud Run env var **`ZOOM_WEBHOOK_SECRET`** set to the Zoom Marketplace app's Secret Token. The "Hash plainToken" Code node reads it via `process.env`.
+- Postgres credential `n8n-pg-vm` (id `ieqLZNc7deNhXoPR`) points at the existing VM Postgres (`35.254.188.80`, db `n8n`, user `n8n-user`).
+- Table schema:
+  ```sql
+  meeting_summaries (
+    id BIGSERIAL PK,
+    zoom_meeting_id TEXT,
+    zoom_meeting_uuid TEXT UNIQUE,
+    topic, host_email TEXT,
+    started_at TIMESTAMPTZ,
+    duration_min INTEGER,
+    recording_url, transcript, summary TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  ```
+  Inserts use `ON CONFLICT (zoom_meeting_uuid) DO NOTHING` so Zoom retries don't duplicate rows.
 
 ## Common ops commands
 

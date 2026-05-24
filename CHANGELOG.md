@@ -8,6 +8,22 @@ All notable changes to this project are documented here.
 - Set `--min-instances=1` on Cloud Run if Telegram cold-start latency becomes annoying
 - Lock down Postgres access (currently public IP + password-only) — possibly via Serverless VPC Connector
 - Automate the Angie workflow re-deploy / config-as-code from `angie-workflow.json`
+- Add a gate before "Send to Telegram" in the Zoom workflow so duplicate Zoom redeliveries (same `zoom_meeting_uuid`) don't re-send the message
+
+---
+
+## [0.5.0] — 2026-05-24
+
+### Added
+- New workflow **Zoom recording → summary → Telegram** (id `8v101lnwYq4QCjgY`, created inactive) — when a Zoom cloud recording finishes, downloads the M4A, transcribes it with Gemini 2.5 Flash, summarizes it, inserts a row into the new `meeting_summaries` Postgres table, and sends the summary to Telegram chat `63277017` via the existing Yarik Bot
+- New table `meeting_summaries` on `n8n-pg-vm` (Postgres on the existing VM) with a `UNIQUE` constraint on `zoom_meeting_uuid` so Zoom redeliveries don't duplicate rows
+- New n8n Postgres credential `n8n-pg-vm` (id `ieqLZNc7deNhXoPR`) pointing at `35.254.188.80:5432`, db `n8n`, user `n8n-user`
+- `zoom-summary-workflow.json` — checked-in export (no embedded secrets), mirrors the `angie-workflow.json` pattern
+
+### Required follow-up (manual, before activation)
+- Create a Zoom Marketplace **Server-to-Server OAuth** app subscribed to `recording.completed`; copy its Secret Token
+- Set `ZOOM_WEBHOOK_SECRET=<token>` env var on the Cloud Run service (`gcloud run services update n8n --update-env-vars=ZOOM_WEBHOOK_SECRET=...`)
+- Activate the workflow in the n8n UI to register the production webhook URL, then paste it into the Zoom app event subscription so the `endpoint.url_validation` handshake can complete
 
 ---
 
