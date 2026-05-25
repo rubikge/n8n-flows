@@ -21,6 +21,10 @@ const manifest = readManifest();
 
 console.log(`-> ${url}${dryRun ? '  (dry-run)' : ''}\n`);
 
+process.stdout.write('  waiting for n8n to be ready... ');
+await n8n.waitForReady();
+console.log('ready');
+
 const credList = await n8n.listCredentials();
 const credByName = Object.fromEntries(credList.map((c) => [c.name, c.id]));
 const allWorkflows = await n8n.listWorkflows();
