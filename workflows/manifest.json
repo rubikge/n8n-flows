@@ -14,7 +14,8 @@
     },
     {
       "file": "publish-to-github-develop.json",
-      "name": "Publish to GitHub (develop)"
+      "name": "Publish to GitHub (develop)",
+      "tag": "dev-only"
     }
   ]
 }

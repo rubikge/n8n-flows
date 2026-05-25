@@ -26,4 +26,4 @@ jobs:
         env:
           N8N_URL: ${{ secrets.N8N_PROD_URL }}
           N8N_API_KEY: ${{ secrets.N8N_PROD_API_KEY }}
-        run: node scripts/deploy.mjs
+        run: node scripts/deploy.mjs --skip-dev-only

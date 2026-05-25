@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Push workflows/*.json to a target n8n instance.
-// Usage: node scripts/deploy.mjs --url=https://... --api-key=... [--dry-run] [--activate-on-create]
+// Usage: node scripts/deploy.mjs --url=https://... --api-key=... [--dry-run] [--activate-on-create] [--skip-dev-only]
 
 import {
   parseArgs,
@@ -16,6 +16,7 @@ const args = parseArgs(process.argv);
 const { url, apiKey } = resolveTarget(args);
 const dryRun = !!args['dry-run'];
 const activateOnCreate = !!args['activate-on-create'];
+const skipDevOnly = !!args['skip-dev-only'];
 const n8n = new N8n(url, apiKey);
 const manifest = readManifest();
 
@@ -34,17 +35,27 @@ console.log(`  credentials: ${credList.length}, workflows: ${allWorkflows.length
 // --- Pass 1: upsert every manifest workflow without errorWorkflow ----------
 const pass1 = [];
 for (const entry of manifest.workflows) {
+  if (skipDevOnly && entry.tag === 'dev-only') {
+    console.log(`- ${entry.file}: skipped (tag=dev-only)`);
+    continue;
+  }
   const source = readWorkflowFile(entry.file);
   if (source.name !== entry.name) {
     throw new Error(`${entry.file}: name "${source.name}" doesn't match manifest "${entry.name}"`);
   }
 
-  const body = normalizeForApi(source, { credentialNameToId: credByName });
+  const body = normalizeForApi(source, {
+    credentialNameToId: credByName,
+    sourceFile: entry.file,
+  });
   const existing = wfByName.get(entry.name);
 
   if (existing) {
     const current = await n8n.getWorkflow(existing.id);
-    const currentBody = normalizeForApi(current, { credentialNameToId: credByName });
+    const currentBody = normalizeForApi(current, {
+      credentialNameToId: credByName,
+      sourceFile: entry.file,
+    });
     if (stableStringify(currentBody) === stableStringify(body)) {
       console.log(`= ${entry.file}: no change`);
       pass1.push({ entry, id: existing.id, source });
@@ -91,12 +102,14 @@ if (errorRefs.length === 0) {
     const body = normalizeForApi(r.source, {
       credentialNameToId: credByName,
       errorWorkflowId: target.id,
+      sourceFile: r.entry.file,
     });
     if (r.id) {
       const current = await n8n.getWorkflow(r.id);
       const currentBody = normalizeForApi(current, {
         credentialNameToId: credByName,
         errorWorkflowId: target.id,
+        sourceFile: r.entry.file,
       });
       if (stableStringify(currentBody) === stableStringify(body)) {
         console.log(`= ${r.entry.file}: errorWorkflow already set (${target.id})`);
