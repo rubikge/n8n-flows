@@ -11,6 +11,10 @@
     {
       "file": "zoom-summary.json",
       "name": "Zoom recording → summary → Telegram"
+    },
+    {
+      "file": "publish-to-github-develop.json",
+      "name": "Publish to GitHub (develop)"
     }
   ]
 }
