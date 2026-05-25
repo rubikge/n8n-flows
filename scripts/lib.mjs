@@ -75,9 +75,10 @@ export class N8n {
         } catch {
           lastReason = `200 with non-JSON body "${text.slice(0, 60).replace(/\s+/g, ' ').trim()}"`;
         }
-      } else if (res.status >= 400 && res.status < 500) {
+      } else if (res.status === 401 || res.status === 403) {
         throw new Error(`n8n ${res.status} during readiness probe: ${text.slice(0, 400)}`);
       } else {
+        // 404 during boot (API route not mounted yet), 5xx, anything else: keep polling.
         lastReason = `${res.status}: ${text.slice(0, 60).replace(/\s+/g, ' ').trim()}`;
       }
       await new Promise((r) => setTimeout(r, intervalMs));
