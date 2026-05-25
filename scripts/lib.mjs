@@ -88,6 +88,19 @@ export class N8n {
 // n8n PUT/POST workflow body accepts only these top-level fields.
 const ACCEPTED_TOP_LEVEL = ['name', 'nodes', 'connections', 'settings'];
 
+// n8n public-API workflow settings whitelist. Newer versions reject unknown keys;
+// the export carries UI-only fields (binaryMode, callerPolicy, availableInMCP, …) that must be stripped.
+const ACCEPTED_SETTINGS = [
+  'saveExecutionProgress',
+  'saveManualExecutions',
+  'saveDataErrorExecution',
+  'saveDataSuccessExecution',
+  'executionTimeout',
+  'errorWorkflow',
+  'timezone',
+  'executionOrder',
+];
+
 function stripNodeRuntime(node) {
   const n = { ...node };
   delete n.issues;
@@ -121,11 +134,13 @@ export function normalizeForApi(workflow, { credentialNameToId, errorWorkflowId 
     return n;
   });
 
-  const s = { ...(out.settings || {}) };
-  delete s.errorWorkflowName;
-  if (errorWorkflowId === undefined || errorWorkflowId === null) {
-    delete s.errorWorkflow;
-  } else {
+  const rawSettings = { ...(out.settings || {}) };
+  const s = {};
+  for (const k of ACCEPTED_SETTINGS) {
+    if (k in rawSettings) s[k] = rawSettings[k];
+  }
+  delete s.errorWorkflow;
+  if (errorWorkflowId !== undefined && errorWorkflowId !== null) {
     s.errorWorkflow = errorWorkflowId;
   }
   out.settings = s;
