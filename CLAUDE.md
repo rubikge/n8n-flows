@@ -88,7 +88,7 @@ Deploy logic:
 2. **Pass 1**: upserts every manifest workflow without `settings.errorWorkflow`. Idempotent — no PUT if the normalized body equals the live one.
 3. **Pass 2**: for any workflow that has `settings.errorWorkflowName`, looks up the target ID by name and PUTs the workflow again with `settings.errorWorkflow` set.
 
-`active` is never toggled on update — set activation once in the UI per env. Use `--activate-on-create` for first-time provisioning.
+`active` is never toggled on update — set activation once in the UI per env. Use `--activate-on-create` for first-time provisioning. Use `--skip-dev-only` (passed by `deploy-prod.yml`) to skip manifest entries whose `tag` is `"dev-only"` — those workflows live only on n8n-dev.
 
 ## CI/CD
 
@@ -106,7 +106,7 @@ Prod is one-way: the repo is the source of truth and `deploy-prod.yml` is the on
 Dev is **bidirectional** so workflows can be authored in the n8n-dev UI without the changes silently dying there:
 
 - **repo → dev** (CI): PRs / non-main pushes trigger `deploy-dev.yml`, which runs `scripts/deploy.mjs` against `n8n-dev`.
-- **dev → repo** (manual): a workflow named **"Publish to GitHub (develop)"** lives inside n8n-dev. Clicking Execute lists **every** workflow on n8n-dev via the n8n Public API, normalizes each one to repo shape, and commits any changed JSON files to the `develop` branch. Unchanged files are skipped (SHA-256 compare against the current `develop` blob). A second branch of the same run regenerates `workflows/manifest.json`: existing entries are kept by `name`, and any workflow not yet in the manifest is appended with a slugified filename (`slugify(name).json`, de-duplicated). The manifest commit only happens when the file actually changed. The template is checked in at `templates/dev-backup-to-github.json` for reference; it is *not* listed in `workflows/manifest.json` so CI never deploys it to prod.
+- **dev → repo** (manual): a workflow named **"Publish to GitHub (develop)"** lives inside n8n-dev. Clicking Execute lists **every** workflow on n8n-dev via the n8n Public API, normalizes each one to repo shape, and commits any changed JSON files to the `develop` branch. Unchanged files are skipped (SHA-256 compare against the current `develop` blob). A second branch of the same run regenerates `workflows/manifest.json`: existing entries are kept by `name` and their slug, any workflow not yet in the manifest is appended with a slugified filename (`slugify(name).json`, de-duplicated), and workflows tagged `dev-only` on n8n-dev get `"tag": "dev-only"` synced into their manifest entry (added or removed as the tag state changes). The manifest commit only happens when the file actually changed. The publish workflow itself is source-controlled at `workflows/publish-to-github-develop.json`; its `manifest.json` entry carries `"tag": "dev-only"` so `deploy-prod.yml` skips it.
 
 Recommended author loop: edit in n8n-dev UI → click **Execute** on "Publish to GitHub (develop)" → review the resulting commit(s) on `develop` → open PR `develop → main` → merge fires `deploy-prod.yml`.
 
@@ -114,6 +114,8 @@ Caveats:
 - Do not run the publish workflow while a feature-branch `deploy-dev.yml` job is in flight. The two directions can clobber each other.
 - Do not push workflow JSON edits to a feature branch while you have uncommitted edits in the n8n-dev UI — same reason.
 - New workflows authored in the dev UI no longer need a pre-existing `workflows/manifest.json` entry — the publish workflow appends one on the same run. If you want a specific filename, add the manifest entry by hand first and the publish flow will honor it.
+
+**Dev-only workflows.** Any workflow that exists only on n8n-dev (operational tooling, not part of the prod product) should be tagged `dev-only` in the n8n-dev UI. The publish workflow's "Build updated manifest" Code node detects that tag and writes `"tag": "dev-only"` onto the manifest entry; `deploy-prod.yml` then passes `--skip-dev-only` to `scripts/deploy.mjs`, which skips those entries. The publish workflow itself is the canonical example and is already tagged this way.
 
 ## Provisioning the dev environment (runbook)
 
@@ -156,7 +158,7 @@ For prod, set `N8N_PROD_URL` and `N8N_PROD_API_KEY` GitHub secrets (the prod API
 
 ### Setup: dev → repo publish workflow
 
-The workflow JSON already lives on n8n-dev as **`hE9Ui650AQIYfgKu`** (created via the n8n REST API; the source-of-truth template is checked in at `templates/dev-backup-to-github.json`). To finish wiring it up:
+The workflow JSON already lives on n8n-dev as **`hE9Ui650AQIYfgKu`** (created via the n8n REST API; the source-of-truth file is checked in at `workflows/publish-to-github-develop.json` and its manifest entry carries `"tag": "dev-only"`). To finish wiring it up:
 
 1. **GitHub**: create the `develop` branch from `main` if it doesn't exist:
    `git push origin main:develop`
@@ -164,10 +166,11 @@ The workflow JSON already lives on n8n-dev as **`hE9Ui650AQIYfgKu`** (created vi
    `gcloud run services update n8n-dev --region=us-central1 --update-env-vars="N8N_DEV_API_KEY=<the dev API key>"`
 3. **n8n-dev UI**: Credentials → New → search "GitHub" → type *GitHub - Access Token*. Name it exactly **`GitHub — n8n backup`** (em dash). Token = a fine-grained PAT scoped to **Contents: read/write** on `rubikge/n8n-flows` only.
 4. **n8n-dev UI**: open the **Publish to GitHub (develop)** workflow. The credential was POSTed by name only — open each GitHub node (`Get manifest.json`, `Get existing file`, `Create file on develop`, `Edit file on develop`, `Edit manifest.json`) and pick `GitHub — n8n backup` from the credential dropdown. Save. Activation not needed — the manual trigger fires regardless.
+5. **n8n-dev UI**: create a tag named exactly `dev-only` (Settings → Tags) and apply it to this workflow. The workflow's "Build updated manifest" node detects this tag and writes `"tag": "dev-only"` on the manifest entry it commits, which keeps the entry out of prod deploys via `--skip-dev-only`. Without this tag, the workflow re-adds itself to `workflows/manifest.json` without the dev-only marker and the next prod deploy crashes on the missing credential.
 
 To run a publish: open the workflow in n8n-dev and click **Execute**. Each changed workflow file becomes one commit on `develop` with message `n8n-dev backup: <filename>`; if any new workflows are appended to `workflows/manifest.json`, that file gets its own commit (`n8n-dev backup: update manifest.json`) in the same run.
 
-If the workflow ever needs to be re-imported from scratch (e.g. dev was rebuilt), import `templates/dev-backup-to-github.json` via the UI or POST it via the n8n REST API (`POST /api/v1/workflows`), then repeat step 4.
+If the workflow ever needs to be re-imported from scratch (e.g. dev was rebuilt), import `workflows/publish-to-github-develop.json` via the UI or POST it via the n8n REST API (`POST /api/v1/workflows`), then repeat steps 4 and 5.
 
 ## Common ops commands
 

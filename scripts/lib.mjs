@@ -143,7 +143,10 @@ function stripNodeRuntime(node) {
 
 // Build the API-ready body. Rebinds credentials by name (fails loudly if missing).
 // errorWorkflowId: undefined -> strip errorWorkflow entirely; null -> strip; string -> set.
-export function normalizeForApi(workflow, { credentialNameToId, errorWorkflowId } = {}) {
+export function normalizeForApi(
+  workflow,
+  { credentialNameToId, errorWorkflowId, sourceFile } = {},
+) {
   const out = {};
   for (const k of ACCEPTED_TOP_LEVEL) {
     if (k in workflow) out[k] = workflow[k];
@@ -156,9 +159,10 @@ export function normalizeForApi(workflow, { credentialNameToId, errorWorkflowId 
       for (const [type, ref] of Object.entries(n.credentials)) {
         const id = credentialNameToId[ref.name];
         if (!id) {
+          const where = sourceFile ? ` in ${sourceFile}` : '';
           throw new Error(
-            `Credential "${ref.name}" (type ${type}, used by node "${n.name}") not found on target. ` +
-              `Create it in the n8n UI with that exact name.`,
+            `Credential "${ref.name}" (type ${type}, used by node "${n.name}"${where}) ` +
+              `not found on target. Create it in the n8n UI with that exact name.`,
           );
         }
         rebound[type] = { id, name: ref.name };
