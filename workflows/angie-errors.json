@@ -50,9 +50,9 @@
     }
   },
   "settings": {
-    "executionOrder": "v1",
+    "saveManualExecutions": true,
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "none",
-    "saveManualExecutions": true
+    "executionOrder": "v1"
   }
 }

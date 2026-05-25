@@ -1,0 +1,589 @@
+{
+  "name": "Publish to GitHub (develop)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "n1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/api/v1/workflows?limit=250",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-API-KEY",
+              "value": "={{ $env.N8N_DEV_API_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n2",
+      "name": "List workflows on n8n-dev",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "value": "rubikge",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "n8n-flows",
+          "mode": "list",
+          "cachedResultName": "n8n-flows",
+          "cachedResultUrl": "https://github.com/rubikge/n8n-flows"
+        },
+        "filePath": "workflows/manifest.json",
+        "asBinaryProperty": false,
+        "additionalParameters": {
+          "reference": "develop"
+        }
+      },
+      "id": "n3",
+      "name": "Get manifest.json",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        0
+      ],
+      "webhookId": "737929a8-83fe-45c8-8b92-ab28ee1c3c56",
+      "credentials": {
+        "githubApi": {
+          "name": "GitHub rubikge"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const listResp = $('List workflows on n8n-dev').first().json;\nconst workflows = listResp.data || [];\nif (listResp.nextCursor) {\n  throw new Error('n8n-dev has more than 250 workflows; add pagination to List workflows.');\n}\nconst idToName = Object.fromEntries(workflows.map(w => [w.id, w.name]));\n\nconst manifestRaw = $input.first().json;\nif (!manifestRaw || !manifestRaw.content) {\n  throw new Error('Could not read workflows/manifest.json from develop branch.');\n}\nconst manifest = JSON.parse(Buffer.from(manifestRaw.content, 'base64').toString('utf8'));\nconst manifestByName = new Map((manifest.workflows || []).map(e => [e.name, e]));\nconst usedFiles = new Set((manifest.workflows || []).map(e => e.file));\n\nfunction slugify(name) {\n  return name\n    .toLowerCase()\n    .normalize('NFKD').replace(/[̀-ͯ]/g, '')\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .slice(0, 60) || 'workflow';\n}\n\nconst items = [];\nfor (const w of workflows) {\n  let entry = manifestByName.get(w.name);\n  if (!entry) {\n    const base = slugify(w.name);\n    let file = `${base}.json`;\n    let i = 2;\n    while (usedFiles.has(file)) {\n      file = `${base}-${i}.json`;\n      i++;\n    }\n    usedFiles.add(file);\n    entry = { file, name: w.name };\n  }\n  items.push({ json: { id: w.id, name: w.name, file: entry.file, idToName } });\n}\nreturn items;"
+      },
+      "id": "n4",
+      "name": "Build work queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=http://localhost:5678/api/v1/workflows/{{ $json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-API-KEY",
+              "value": "={{ $env.N8N_DEV_API_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n5",
+      "name": "Get full workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const crypto = require('crypto');\n\nconst wf = $json;\nconst queueItem = $('Build work queue').item.json;\nconst file = queueItem.file;\nconst idToName = queueItem.idToName;\n\nfunction stripNodeRuntime(node) {\n  const n = { ...node };\n  delete n.issues;\n  return n;\n}\n\nconst body = {\n  name: wf.name,\n  nodes: (wf.nodes || []).map(node => {\n    const n = stripNodeRuntime(node);\n    if (n.credentials) {\n      const rebound = {};\n      for (const [type, ref] of Object.entries(n.credentials)) {\n        rebound[type] = { name: ref.name };\n      }\n      n.credentials = rebound;\n    }\n    return n;\n  }),\n  connections: wf.connections || {},\n  settings: { ...(wf.settings || {}) },\n};\n\nif (body.settings.errorWorkflow) {\n  const errName = idToName && idToName[body.settings.errorWorkflow];\n  if (!errName) {\n    throw new Error(`Workflow \"${wf.name}\" references error workflow ${body.settings.errorWorkflow} that wasn't in the listing.`);\n  }\n  delete body.settings.errorWorkflow;\n  body.settings.errorWorkflowName = errName;\n}\n\nconst text = JSON.stringify(body, null, 2) + '\\n';\nconst contentBase64 = Buffer.from(text, 'utf8').toString('base64');\nconst sha256 = crypto.createHash('sha256').update(text).digest('hex');\nconst path = `workflows/${file}`;\n\nreturn { json: { path, file, text, contentBase64, sha256 } };"
+      },
+      "id": "n6",
+      "name": "Normalize for repo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "value": "rubikge",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "n8n-flows",
+          "mode": "name"
+        },
+        "filePath": "={{ $json.path }}",
+        "asBinaryProperty": false,
+        "additionalParameters": {
+          "reference": "develop"
+        }
+      },
+      "id": "n7",
+      "name": "Get existing file",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        0
+      ],
+      "webhookId": "0b624130-3286-4fef-915a-43da63f9fda4",
+      "credentials": {
+        "githubApi": {
+          "name": "GitHub rubikge"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const crypto = require('crypto');\n\nconst incoming = $('Normalize for repo').item.json;\nconst got = $json;\n\nlet existingSha256 = null;\nlet githubSha = null;\n\nif (got && got.content && got.encoding === 'base64') {\n  const existingText = Buffer.from(got.content, 'base64').toString('utf8');\n  existingSha256 = crypto.createHash('sha256').update(existingText).digest('hex');\n  githubSha = got.sha;\n}\n\nlet action;\nif (existingSha256 === null) action = 'create';\nelse if (existingSha256 === incoming.sha256) action = 'skip';\nelse action = 'edit';\n\nreturn { json: {\n  action,\n  path: incoming.path,\n  file: incoming.file,\n  text: incoming.text,\n  sha256: incoming.sha256,\n  githubSha,\n} };"
+      },
+      "id": "n8",
+      "name": "Compare hashes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c-create",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "create",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "create"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c-edit",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "edit",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "edit"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c-skip",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "skip",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "skip"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n9",
+      "name": "Switch on action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1920,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "owner": {
+          "__rl": true,
+          "value": "rubikge",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "n8n-flows",
+          "mode": "name"
+        },
+        "filePath": "={{ $json.path }}",
+        "fileContent": "={{ $json.text }}",
+        "commitMessage": "=n8n-dev backup: {{ $json.file }}",
+        "additionalParameters": {
+          "branch": {
+            "branch": "develop"
+          }
+        }
+      },
+      "id": "n10",
+      "name": "Create file on develop",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        2160,
+        -160
+      ],
+      "webhookId": "217f2a32-de94-438c-81df-62359653c0aa",
+      "credentials": {
+        "githubApi": {
+          "name": "GitHub rubikge"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "value": "rubikge",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "n8n-flows",
+          "mode": "name"
+        },
+        "filePath": "={{ $json.path }}",
+        "fileContent": "={{ $json.text }}",
+        "commitMessage": "=n8n-dev backup: {{ $json.file }}",
+        "additionalParameters": {
+          "branch": {
+            "branch": "develop"
+          }
+        }
+      },
+      "id": "n11",
+      "name": "Edit file on develop",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        2160,
+        0
+      ],
+      "webhookId": "67991b03-950b-445e-9607-90d1a082e1d4",
+      "credentials": {
+        "githubApi": {
+          "name": "GitHub rubikge"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "n12",
+      "name": "Skip (unchanged)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\nconst listResp = $('List workflows on n8n-dev').first().json;\nconst workflows = listResp.data || [];\n\nconst manifestRaw = $input.first().json;\nif (!manifestRaw || !manifestRaw.content) {\n  throw new Error('Could not read workflows/manifest.json from develop branch.');\n}\nconst manifestText = Buffer.from(manifestRaw.content, 'base64').toString('utf8');\nconst manifest = JSON.parse(manifestText);\nconst existingByName = new Map((manifest.workflows || []).map(e => [e.name, e]));\nconst usedFiles = new Set((manifest.workflows || []).map(e => e.file));\n\nfunction slugify(name) {\n  return name\n    .toLowerCase()\n    .normalize('NFKD').replace(/[̀-ͯ]/g, '')\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .slice(0, 60) || 'workflow';\n}\n\nconst updated = manifest.workflows ? [...manifest.workflows] : [];\nfor (const w of workflows) {\n  if (existingByName.has(w.name)) continue;\n  const base = slugify(w.name);\n  let file = `${base}.json`;\n  let i = 2;\n  while (usedFiles.has(file)) {\n    file = `${base}-${i}.json`;\n    i++;\n  }\n  usedFiles.add(file);\n  updated.push({ file, name: w.name });\n}\n\nconst newText = JSON.stringify({ workflows: updated }, null, 2) + '\\n';\nconst oldHash = crypto.createHash('sha256').update(manifestText).digest('hex');\nconst newHash = crypto.createHash('sha256').update(newText).digest('hex');\n\nreturn { json: {\n  action: oldHash === newHash ? 'skip' : 'edit',\n  path: 'workflows/manifest.json',\n  file: 'manifest.json',\n  text: newText,\n  sha256: newHash,\n}};"
+      },
+      "id": "8678880e-30e6-4e5a-8a4e-32a09f91b276",
+      "name": "Build updated manifest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c-manifest-edit",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "edit",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f81d3830-091a-4ff4-af77-03f050697882",
+      "name": "Manifest needs update?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "value": "rubikge",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "n8n-flows",
+          "mode": "name"
+        },
+        "filePath": "={{ $json.path }}",
+        "fileContent": "={{ $json.text }}",
+        "commitMessage": "n8n-dev backup: update manifest.json",
+        "additionalParameters": {
+          "branch": {
+            "branch": "develop"
+          }
+        }
+      },
+      "id": "83b12287-a4b7-48f4-84a7-902115cb5358",
+      "name": "Edit manifest.json",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        240
+      ],
+      "webhookId": "6732633b-e7e8-41da-b2b7-b61298582fdc",
+      "credentials": {
+        "githubApi": {
+          "name": "GitHub rubikge"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "List workflows on n8n-dev",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List workflows on n8n-dev": {
+      "main": [
+        [
+          {
+            "node": "Get manifest.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get manifest.json": {
+      "main": [
+        [
+          {
+            "node": "Build work queue",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build updated manifest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build work queue": {
+      "main": [
+        [
+          {
+            "node": "Get full workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get full workflow": {
+      "main": [
+        [
+          {
+            "node": "Normalize for repo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize for repo": {
+      "main": [
+        [
+          {
+            "node": "Get existing file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get existing file": {
+      "main": [
+        [
+          {
+            "node": "Compare hashes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare hashes": {
+      "main": [
+        [
+          {
+            "node": "Switch on action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch on action": {
+      "main": [
+        [
+          {
+            "node": "Create file on develop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit file on develop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip (unchanged)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build updated manifest": {
+      "main": [
+        [
+          {
+            "node": "Manifest needs update?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manifest needs update?": {
+      "main": [
+        [
+          {
+            "node": "Edit manifest.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  }
+}
