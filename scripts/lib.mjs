@@ -51,6 +51,40 @@ export class N8n {
     return text ? JSON.parse(text) : null;
   }
 
+  // Cloud Run cold-starts return "n8n is starting up. Please wait" with HTTP 200
+  // for ~10-20s; poll a cheap endpoint until it answers with real JSON.
+  async waitForReady({ timeoutMs = 180000, intervalMs = 3000 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    let lastReason = 'no response yet';
+    while (Date.now() < deadline) {
+      let res;
+      try {
+        res = await fetch(`${this.baseUrl}/api/v1/workflows?limit=1`, {
+          headers: { 'X-N8N-API-KEY': this.apiKey, Accept: 'application/json' },
+        });
+      } catch (e) {
+        lastReason = `fetch failed: ${e.message}`;
+        await new Promise((r) => setTimeout(r, intervalMs));
+        continue;
+      }
+      const text = await res.text();
+      if (res.ok) {
+        try {
+          JSON.parse(text);
+          return;
+        } catch {
+          lastReason = `200 with non-JSON body "${text.slice(0, 60).replace(/\s+/g, ' ').trim()}"`;
+        }
+      } else if (res.status >= 400 && res.status < 500) {
+        throw new Error(`n8n ${res.status} during readiness probe: ${text.slice(0, 400)}`);
+      } else {
+        lastReason = `${res.status}: ${text.slice(0, 60).replace(/\s+/g, ' ').trim()}`;
+      }
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    throw new Error(`n8n not ready after ${timeoutMs}ms (last: ${lastReason})`);
+  }
+
   async listWorkflows() {
     const out = [];
     let cursor;

@@ -19,6 +19,10 @@ const n8n = new N8n(url, apiKey);
 
 console.log(`<- ${url}\n`);
 
+process.stdout.write('  waiting for n8n to be ready... ');
+await n8n.waitForReady();
+console.log('ready');
+
 const all = await n8n.listWorkflows();
 const byName = new Map(all.map((w) => [w.name, w]));
 const idToName = Object.fromEntries(all.map((w) => [w.id, w.name]));

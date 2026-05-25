@@ -4,6 +4,9 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Changed
+- **Publish to GitHub (develop)** workflow on n8n-dev (`hE9Ui650AQIYfgKu`) no longer iterates `workflows/manifest.json` — it now lists every live workflow on n8n-dev and pushes each one. A parallel branch regenerates `workflows/manifest.json`, appending any workflow not yet in it with a slugified filename, and commits the manifest only when it actually changes. Net effect: new workflows authored in the dev UI get published on the first Execute without a pre-existing manifest entry.
+
 ### Ideas / Next Steps
 - Set `--min-instances=1` on Cloud Run if Telegram cold-start latency becomes annoying
 - Lock down Postgres access (currently public IP + password-only) — possibly via Serverless VPC Connector

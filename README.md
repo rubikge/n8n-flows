@@ -31,10 +31,11 @@ Required GitHub Actions secrets: `N8N_DEV_URL`, `N8N_DEV_API_KEY`, `N8N_PROD_URL
 
 ## Editing workflows
 
-Two safe paths:
+Three safe paths:
 
 1. **From a feature branch (recommended).** Edit `workflows/*.json` directly, push, open a PR — CI deploys to dev for you to verify. Merge → CI deploys to prod.
-2. **Build in the dev n8n UI, then export.** Develop interactively in dev, then run `N8N_URL=$DEV_URL N8N_API_KEY=$DEV_KEY node scripts/export.mjs` locally to update `workflows/*.json`, commit, PR, merge.
+2. **Build in the dev n8n UI, then publish from inside n8n.** Develop interactively in n8n-dev, then click **Execute** on the in-n8n **Publish to GitHub (develop)** workflow. It commits every changed workflow JSON to `develop` and auto-appends any new ones to `workflows/manifest.json`. Then PR `develop → main` and merge → CI deploys to prod. See [CLAUDE.md → Dev ↔ repo sync flow](CLAUDE.md#dev--repo-sync-flow).
+3. **Build in the dev n8n UI, then export locally.** Same idea as #2 but via your laptop: `N8N_URL=$DEV_URL N8N_API_KEY=$DEV_KEY node scripts/export.mjs` to refresh `workflows/*.json`, then commit / PR / merge. You'll have to edit `manifest.json` by hand for any new workflow.
 
 **Do not edit workflows in the prod UI.** Each prod deploy overwrites them. If someone has, run `node scripts/export.mjs` against prod immediately to capture the change, then commit.
 
