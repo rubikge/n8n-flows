@@ -61,9 +61,11 @@ export class N8n {
       try {
         res = await fetch(`${this.baseUrl}/api/v1/workflows?limit=1`, {
           headers: { 'X-N8N-API-KEY': this.apiKey, Accept: 'application/json' },
+          signal: AbortSignal.timeout(10000),
         });
       } catch (e) {
         lastReason = `fetch failed: ${e.message}`;
+        process.stdout.write('.');
         await new Promise((r) => setTimeout(r, intervalMs));
         continue;
       }
@@ -81,6 +83,7 @@ export class N8n {
         // 404 during boot (API route not mounted yet), 5xx, anything else: keep polling.
         lastReason = `${res.status}: ${text.slice(0, 60).replace(/\s+/g, ' ').trim()}`;
       }
+      process.stdout.write('.');
       await new Promise((r) => setTimeout(r, intervalMs));
     }
     throw new Error(`n8n not ready after ${timeoutMs}ms (last: ${lastReason})`);
