@@ -1,6 +1,6 @@
-# CLAUDE.md
+# GEMINI.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Google AntiGravity when working with code in this repository.
 
 ## Overview
 
@@ -11,7 +11,7 @@ This repo manages an n8n setup deployed on **Google Cloud Run** across two envir
 
 `workflows/*.json` is the **source of truth** for workflow definitions. GitHub Actions pushes those JSONs into n8n via the REST API on merge to `main` (deploying to prod). Editing workflows directly in the prod n8n UI is unsafe — the next deploy will overwrite your changes.
 
-The `n8n-mcp` MCP server is configured to talk to **dev** (`n8n-dev`), so `mcp__n8n-mcp__n8n_*` tools operate on n8n-dev workflows. Prod is never touched by MCP — it only changes via `deploy-prod.yml` on merge to `main`. There are no tests or linters — this is a configuration / ops repo.
+The `n8n-mcp` MCP server is configured to talk to **dev** (`n8n-dev`), so `mcp_n8n-mcp_n8n_*` tools operate on n8n-dev workflows. Prod is never touched by MCP — it only changes via `deploy-prod.yml` on merge to `main`. There are no tests or linters — this is a configuration / ops repo.
 
 ## Cloud n8n
 
@@ -147,7 +147,7 @@ Then in the dev n8n UI (`$DEV_URL/setup`):
 3. Manually create the credentials with **the same names** as prod: `Yarik Bot` (Telegram, dev BotFather token), `n8n-pg-vm` (Postgres, host `35.254.188.80`, db `n8n_dev`), `Google Gemini(PaLM) Api account`, `sergei@rubik.school` (Gmail OAuth — separate OAuth client or re-use prod's).
 4. From your laptop: `N8N_URL=$DEV_URL N8N_API_KEY=$DEV_KEY node scripts/deploy.mjs --activate-on-create` — should create all three workflows and activate them.
 
-For prod, set `N8N_PROD_URL` and `N8N_PROD_API_KEY` GitHub secrets (the prod API key is the one already in MCP config).
+For prod, set `N8N_PROD_URL` and `N8N_PROD_API_KEY` GitHub secrets.
 
 ### Setup: dev → repo publish workflow
 
@@ -204,16 +204,32 @@ If a future audit needs them locked back down: delete the project policies to re
 
 Free tier covers the VM + 30GB disk + ~2M Cloud Run requests/mo. Active cost is Secret Manager (~$0.12/mo) and any egress/runtime above free tier. Cold start ~10–20s after idle since Cloud Run scales to zero — add `--min-instances=1` (~$5–10/mo) if Telegram trigger latency matters.
 
-## MCP server
+## MCP Configuration in AntiGravity
 
-The `n8n-mcp` MCP server is configured locally (per-project) to point at the **n8n-dev** Cloud Run URL (`https://n8n-dev-dpcbzmoa5a-uc.a.run.app`) with the dev API key. Pointing MCP at dev keeps experiments off prod — prod is only touched by `deploy-prod.yml` on merge to `main`. Reconfigure with:
+To configure `n8n-mcp` in AntiGravity:
+1. Open the **Agent Panel** (`Ctrl+Alt+B`).
+2. Click **Manage MCP Servers** in the top dropdown.
+3. Click **View raw config** to open `mcp_config.json`.
+4. Add the `n8n-mcp` definition to the `mcpServers` object:
 
-```bash
-claude mcp get n8n-mcp                # view current config
-claude mcp remove n8n-mcp -s local    # remove
-claude mcp add n8n-mcp \
-  -e N8N_API_URL=https://n8n-dev-dpcbzmoa5a-uc.a.run.app \
-  -e N8N_API_KEY=<dev key> \
-  -e MCP_MODE=stdio -e LOG_LEVEL=error -e DISABLE_CONSOLE_OUTPUT=true -e WEBHOOK_SECURITY_MODE=moderate \
-  -- npx n8n-mcp
+```json
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "n8n-mcp"
+      ],
+      "env": {
+        "N8N_API_URL": "https://n8n-dev-dpcbzmoa5a-uc.a.run.app",
+        "N8N_API_KEY": "<DEV_API_KEY>",
+        "MCP_MODE": "stdio",
+        "LOG_LEVEL": "error",
+        "DISABLE_CONSOLE_OUTPUT": "true",
+        "WEBHOOK_SECURITY_MODE": "moderate"
+      }
+    }
+  }
+}
 ```

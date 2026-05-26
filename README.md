@@ -13,7 +13,7 @@ Workflow definitions live in [`workflows/`](workflows/) and are the source of tr
 n8n-docker/
 ├── workflows/                  # source of truth — one JSON per workflow + manifest.json
 ├── scripts/                    # deploy.mjs (repo -> n8n) and export.mjs (n8n -> repo)
-├── .github/workflows/          # deploy-dev.yml, deploy-prod.yml
+├── .github/workflows/          # deploy-prod.yml
 ├── CLAUDE.md                   # detailed ops guide + GCP resource map (read this)
 ├── CHANGELOG.md
 ├── package.json                # Node 20, scripts: export / deploy / deploy:dry
@@ -24,18 +24,16 @@ n8n-docker/
 
 | Branch / event | Deploys to |
 |---|---|
-| Pull request, push to any non-`main` branch | dev (`n8n-dev`) |
 | Push to `main` | prod (`n8n`) |
 
-Required GitHub Actions secrets: `N8N_DEV_URL`, `N8N_DEV_API_KEY`, `N8N_PROD_URL`, `N8N_PROD_API_KEY`.
+Required GitHub Actions secrets: `N8N_PROD_URL`, `N8N_PROD_API_KEY`.
 
 ## Editing workflows
 
-Three safe paths:
+Two safe paths:
 
-1. **From a feature branch (recommended).** Edit `workflows/*.json` directly, push, open a PR — CI deploys to dev for you to verify. Merge → CI deploys to prod.
-2. **Build in the dev n8n UI, then publish from inside n8n.** Develop interactively in n8n-dev, then click **Execute** on the in-n8n **Publish to GitHub (develop)** workflow. It commits every changed workflow JSON to `develop` and auto-appends any new ones to `workflows/manifest.json`. Then PR `develop → main` and merge → CI deploys to prod. See [CLAUDE.md → Dev ↔ repo sync flow](CLAUDE.md#dev--repo-sync-flow).
-3. **Build in the dev n8n UI, then export locally.** Same idea as #2 but via your laptop: `N8N_URL=$DEV_URL N8N_API_KEY=$DEV_KEY node scripts/export.mjs` to refresh `workflows/*.json`, then commit / PR / merge. You'll have to edit `manifest.json` by hand for any new workflow.
+1. **Build in the dev n8n UI, then publish from inside n8n.** Develop interactively in n8n-dev, then click **Execute** on the in-n8n **Publish to GitHub (develop)** workflow. It commits every changed workflow JSON to `develop` and auto-appends any new ones to `workflows/manifest.json`. Then PR `develop → main` and merge → CI deploys to prod. See [CLAUDE.md → Dev ↔ repo sync flow](CLAUDE.md#dev--repo-sync-flow).
+2. **Build in the dev n8n UI, then export locally.** Same idea as #1 but via your laptop: `N8N_URL=$DEV_URL N8N_API_KEY=$DEV_KEY node scripts/export.mjs` to refresh `workflows/*.json`, then commit / PR / merge. You'll have to edit `manifest.json` by hand for any new workflow.
 
 **Do not edit workflows in the prod UI.** Each prod deploy overwrites them. If someone has, run `node scripts/export.mjs` against prod immediately to capture the change, then commit.
 
