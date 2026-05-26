@@ -1,0 +1,485 @@
+{
+  "name": "Telegram Gemini Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "a2e57b3f-1d4c-4e8a-bd0d-c0aa0ee346a0",
+      "name": "Listen for incoming events",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "position": [
+        -1440,
+        496
+      ],
+      "typeVersion": 1.3,
+      "webhookId": "bf49472a-9be6-45ab-896a-8f3cb8b27ec3",
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram Bot (Gemini Agent)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "allow_1",
+              "name": "allow",
+              "type": "string",
+              "value": "63277017"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5e52c8df-9c2b-4e1b-a5d6-d08cf145adbb",
+      "name": "AllowList",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        -1216,
+        448
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "auth_check",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $('Listen for incoming events').first().json.message.from.id }}",
+              "rightValue": "={{ $json.allow }}"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "bf58c0c4-9721-4f16-831e-d2cbdf32ac9f",
+      "name": "If1",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -1056,
+        144
+      ],
+      "typeVersion": 2.3
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Listen for incoming events').item.json.message.from.id }}",
+        "text": "=",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "4ae188cb-fa67-4bd9-96de-0c33a921d7b3",
+      "name": "Ack: processing",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        -784,
+        208
+      ],
+      "typeVersion": 1.2,
+      "webhookId": "0b7f0ffb-f3d5-428a-8408-6cd8b20be9f2",
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram Bot (Gemini Agent)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set_text",
+              "name": "text",
+              "type": "string",
+              "value": "={{ $('Listen for incoming events').item.json.message.text || '' }}"
+            },
+            {
+              "id": "set_session_id",
+              "name": "sessionId",
+              "type": "string",
+              "value": "={{ $('Listen for incoming events').item.json.message.from.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9de3402e-c5db-44a5-bdf9-065a34ec01f3",
+      "name": "Voice or Text",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        -544,
+        -96
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "voice_check",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              },
+              "leftValue": "={{ $('Listen for incoming events').item.json.message.text }}",
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9c03b878-5db0-47b2-bd0b-4de0ae93fbc0",
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -304,
+        320
+      ],
+      "typeVersion": 2.3
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Listen for incoming events').item.json.message.voice.file_id }}",
+          "mode": "expression"
+        },
+        "additionalFields": {}
+      },
+      "id": "1ffb5dc0-e76e-473d-bd88-6644fcfc145a",
+      "name": "Get Voice File",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        -160,
+        -32
+      ],
+      "typeVersion": 1.2,
+      "webhookId": "1f787a74-1396-4257-a22b-5a04010a87a4",
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram Bot (Gemini Agent)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.5-flash",
+          "mode": "id"
+        },
+        "inputType": "binary",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        160,
+        -48
+      ],
+      "id": "1d30c008-6a3c-47bc-bd88-34fbcf8cfcf8",
+      "name": "Analyze audio",
+      "credentials": {
+        "googlePalmApi": {
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text || $json.content?.parts?.[0]?.text || '' }}",
+        "options": {
+          "systemMessage": "You are a helpful assistant.\n\nToday's date is {{ $now }}.\n\nGuidelines:\n- Respond concisely.\n- Use the calculator tool for any math calculations."
+        }
+      },
+      "id": "fe3dfdf5-cde0-47fd-b5bc-d232efd688cf",
+      "name": "Telegram Gemini Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        432,
+        96
+      ],
+      "typeVersion": 3.1
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "telegram_gemini_agent_session",
+        "contextWindowLength": 10
+      },
+      "id": "5898efb0-bd91-4d32-9cb8-b0a34bcfcfcb",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "position": [
+        224,
+        640
+      ],
+      "typeVersion": 1.4
+    },
+    {
+      "parameters": {
+        "modelName": "=models/gemini-3.5-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        160,
+        368
+      ],
+      "id": "f6a420b9-fa08-4bf8-bfae-68cc90cfdb4f",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "272b2203-8dcf-4e76-88cf-f30be6f1ffde",
+      "name": "Calculator",
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "position": [
+        432,
+        512
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "truncate_1",
+              "name": "text",
+              "type": "string",
+              "value": "={{ (($json.output || '') + '').replace(/\\*/g, '').replace(/`/g, '').replace(/_/g, '').replace(/\\[/g, '').replace(/\\]/g, '').slice(0, 4000) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cdcdbcbf-60c0-43f1-bd12-f7035cfbe909",
+      "name": "Truncate output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        816,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "=",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "7b7cfa3b-55e1-45cf-81ff-a32039cfdfcb",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        1024,
+        288
+      ],
+      "typeVersion": 1.2,
+      "webhookId": "8773be9b-25cb-486f-a09e-b05075fb0e3d",
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram Bot (Gemini Agent)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Listen for incoming events": {
+      "main": [
+        [
+          {
+            "node": "AllowList",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AllowList": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Ack: processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ack: processing": {
+      "main": [
+        [
+          {
+            "node": "Voice or Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice or Text": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Get Voice File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram Gemini Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Voice File": {
+      "main": [
+        [
+          {
+            "node": "Analyze audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze audio": {
+      "main": [
+        [
+          {
+            "node": "Telegram Gemini Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Telegram Gemini Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Telegram Gemini Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator": {
+      "ai_tool": [
+        [
+          {
+            "node": "Telegram Gemini Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Gemini Agent": {
+      "main": [
+        [
+          {
+            "node": "Truncate output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Truncate output": {
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  }
+}
